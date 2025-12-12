@@ -260,16 +260,3 @@ resource "aws_instance" "strapi" {
     Owner = "aditya"
   }
 }
-
-# ============================================================
-# OUTPUTS
-# ============================================================
-output "ec2_public_ip" {
-  description = "Public IP of the Strapi EC2 instance"
-  value       = aws_instance.strapi.public_ip
-}
-
-output "deployed_image" {
-  description = "Image that the instance will pull"
-  value       = local.full_image
-}
