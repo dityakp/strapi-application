@@ -35,12 +35,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Terraform init
+            - name: Terraform init
+        working-directory: ./terraform
         run: terraform init -input=false
 
-      - name: Terraform apply (deploy)
+      - name: Terraform plan
+        id: plan
+        working-directory: ./terraform
         run: |
-          # if image_uri provided, pass it; otherwise pass image_tag
+          TFVARS=""
+          if [ -n "${{ github.event.inputs.image_uri }}" ]; then
+            TFVARS="-var=image_uri='${{ github.event.inputs.image_uri }}'"
+          fi
+          terraform plan -input=false -var="image_tag=${{ github.event.inputs.image_tag }}" $TFVARS
+
+      - name: Terraform apply (deploy)
+        working-directory: ./terraform
+        run: |
           TFVARS=""
           if [ -n "${{ github.event.inputs.image_uri }}" ]; then
             TFVARS="-var=image_uri='${{ github.event.inputs.image_uri }}'"
