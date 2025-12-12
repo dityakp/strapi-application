@@ -153,26 +153,41 @@ resource "aws_db_instance" "strapi_rds" {
 # USER-DATA → INSTALL DOCKER, LOGIN TO ECR, RUN STRAPI
 # ============================================================
  
+# compute full image string (if image_uri provided use it, else use ECR repo + tag)
+locals {
+  full_image = var.image_uri != "" ? var.image_uri : "${aws_ecr_repository.strapi.repository_url}:${var.image_tag}"
+}
+
+# then in your user_data heredoc replace the FULL_IMAGE definition with:
+# (if you use public ECR replace aws_ecrpublic_repository... accordingly)
+
 locals {
   user_data = <<-EOF
               #!/bin/bash
+              set -e
               apt-get update -y
-              apt-get install -y docker.io awscli
- 
+              apt-get install -y docker.io
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
- 
-              # Login to ECR
-              aws ecr get-login-password --region ${var.aws_region} \
-                | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com
- 
-              # Pull your image
-              docker pull ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/strapi-repo-aditya:latest
- 
-              # Wait for RDS to initialize
-              sleep 60
- 
+
+              FULL_IMAGE="${local.full_image}"
+
+              echo "Pulling image $${FULL_IMAGE}"
+              for i in 1 2 3 4 5; do
+                if docker pull $${FULL_IMAGE}; then
+                  echo "Pulled $${FULL_IMAGE} successfully"
+                  break
+                else
+                  echo "docker pull failed (attempt $${i}), retrying in 10s"
+                  sleep 10
+                fi
+              done
+
+              if docker ps -a --format '{{.Names}}' | grep -q '^strapi$'; then
+                docker rm -f strapi || true
+              fi
+
               docker run -d -p 1337:1337 \
                 --name strapi \
                 -e DATABASE_CLIENT=postgres \
@@ -185,9 +200,11 @@ locals {
                 -e DATABASE_SSL__REJECT_UNAUTHORIZED=false \
                 -e HOST=0.0.0.0 \
                 -e PORT=1337 \
-                ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/strapi-repo-aditya:latest
+                $${FULL_IMAGE}
+
               EOF
 }
+
  
 # ============================================================
 # EC2 INSTANCE

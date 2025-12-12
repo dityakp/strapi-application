@@ -5,3 +5,7 @@ output "public_ip" {
 output "strapi_url" {
   value = "http://${aws_instance.strapi.public_dns}:${var.strapi_port}"
 }
+
+output "deployed_image" {
+  value = local.full_image
+}

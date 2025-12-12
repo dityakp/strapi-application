@@ -27,3 +27,15 @@ variable "allowed_ssh_cidr" {
   type        = string
   default     = "0.0.0.0/0"
 }
+
+variable "image_tag" {
+  description = "Docker image tag to pull (overridden by CI/CD)."
+  type        = string
+  default     = "latest"
+}
+
+variable "image_uri" {
+  description = "Optional full image URI (overrides repo + tag)."
+  type        = string
+  default     = ""
+}
