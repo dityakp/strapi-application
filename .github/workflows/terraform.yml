@@ -1,59 +1,86 @@
-name: CD — Terraform Deploy (manual)
-
+name: CD - Terraform manual deploy (use existing TF)
+ 
 on:
+
   workflow_dispatch:
+
     inputs:
-      image_tag:
-        description: 'Image tag (from CI). Example: ab12cd34'
+
+      key_name:
+
+        description: 'Existing EC2 key pair name to use for SSH (required by TF var key_name)'
+
         required: true
-      image_uri:
-        description: 'Optional full image URI. If set, Terraform will use this directly.'
+
+      tf_auto_approve:
+
+        description: 'Auto approve terraform.apply?'
+
         required: false
 
+        default: 'true'
+ 
 permissions:
-  contents: read
 
+  contents: read
+ 
 jobs:
+
   terraform:
+
     runs-on: ubuntu-latest
-    env:
-      TF_IN_AUTOMATION: "true"
 
     steps:
-      - name: Checkout
+
+      - name: Checkout repo
+
         uses: actions/checkout@v4
-
+ 
       - name: Setup Terraform
+
         uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: "1.5.7"
 
-      - name: Configure AWS credentials for Terraform
+        with:
+
+          terraform_version: '1.5.0'
+ 
+      - name: Configure AWS credentials
+
         uses: aws-actions/configure-aws-credentials@v2
+
         with:
-          aws-access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
+
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
           aws-region: ${{ secrets.AWS_REGION }}
-
+ 
       - name: Terraform init
+
         working-directory: ./terraform
+
         run: terraform init -input=false
-
+ 
       - name: Terraform plan
-        id: plan
-        working-directory: ./terraform
-        run: |
-          TFVARS=""
-          if [ -n "${{ github.event.inputs.image_uri }}" ]; then
-            TFVARS="-var=image_uri='${{ github.event.inputs.image_uri }}'"
-          fi
-          terraform plan -input=false -var="image_tag=${{ github.event.inputs.image_tag }}" $TFVARS
 
-      - name: Terraform apply (deploy)
         working-directory: ./terraform
-        run: |
-          TFVARS=""
-          if [ -n "${{ github.event.inputs.image_uri }}" ]; then
-            TFVARS="-var=image_uri='${{ github.event.inputs.image_uri }}'"
-          fi
-          terraform apply -input=false -auto-approve -var="image_tag=${{ github.event.inputs.image_tag }}" $TFVARS
+
+        run: terraform plan -input=false -var="key_name=${{ github.event.inputs.key_name }}"
+ 
+      - name: Terraform apply (auto)
+
+        if: ${{ github.event.inputs.tf_auto_approve == 'true' }}
+
+        working-directory: ./terraform
+
+        run: terraform apply -input=false -auto-approve -var="key_name=${{ github.event.inputs.key_name }}"
+ 
+      - name: Terraform apply (manual)
+
+        if: ${{ github.event.inputs.tf_auto_approve != 'true' }}
+
+        working-directory: ./terraform
+
+        run: terraform apply -input=false -var="key_name=${{ github.event.inputs.key_name }}"
+ 
