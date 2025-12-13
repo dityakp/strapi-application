@@ -9,6 +9,6 @@ output "strapi_url" {
 }
 
 output "deployed_image" {
-  description = "Image that the instance will pull (repo:tag or image_uri)"
-  value       = local.full_image
+  description = "Docker image deployed on EC2"
+  value       = local.image_uri
 }
