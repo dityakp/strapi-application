@@ -12,14 +12,16 @@ provider "aws" {
   region = var.aws_region
 }
 
-# -------------------------
-# Get AWS Account ID
-# -------------------------
+# ============================================================
+# ACCOUNT INFO
+# ============================================================
+
 data "aws_caller_identity" "current" {}
 
-# -------------------------
-# Ubuntu 22.04 AMI
-# -------------------------
+# ============================================================
+# AMI
+# ============================================================
+
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"]
@@ -30,9 +32,10 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# -------------------------
-# VPC & Subnets
-# -------------------------
+# ============================================================
+# NETWORK
+# ============================================================
+
 data "aws_vpc" "default" {
   default = true
 }
@@ -45,8 +48,9 @@ data "aws_subnets" "default_subnets" {
 }
 
 # ============================================================
-# IAM ROLE + INSTANCE PROFILE FOR EC2 (REQUIRED FOR PRIVATE ECR)
+# IAM — EC2 → ECR PULL ACCESS
 # ============================================================
+
 resource "aws_iam_role" "ec2_role" {
   name = "ec2-ecr-role-aditya"
 
@@ -73,12 +77,12 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 }
 
 # ============================================================
-# SECURITY GROUPS — EC2 & RDS
+# SECURITY GROUP — STRAPI
 # ============================================================
+
 resource "aws_security_group" "strapi_sg" {
-  name        = "strapi-sg-aditya"
-  description = "Allow HTTP & SSH for Strapi"
-  vpc_id      = data.aws_vpc.default.id
+  name   = "strapi-sg-aditya"
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port   = var.strapi_port
@@ -100,29 +104,15 @@ resource "aws_security_group" "strapi_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = {
-    Name  = "strapi-sg-aditya"
-    Owner = "aditya"
-  }
 }
 
+# ============================================================
+# RDS
+# ============================================================
+
 resource "aws_security_group" "strapi_rds_sg" {
-  name        = "strapi-rds-sg-aditya"
-  description = "Allow EC2 to reach RDS"
-  vpc_id      = data.aws_vpc.default.id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name  = "strapi-rds-sg-aditya"
-    Owner = "aditya"
-  }
+  name   = "strapi-rds-sg-aditya"
+  vpc_id = data.aws_vpc.default.id
 }
 
 resource "aws_security_group_rule" "allow_ec2_to_rds" {
@@ -134,17 +124,9 @@ resource "aws_security_group_rule" "allow_ec2_to_rds" {
   source_security_group_id = aws_security_group.strapi_sg.id
 }
 
-# ============================================================
-# RDS SUBNET GROUP + RDS INSTANCE
-# ============================================================
 resource "aws_db_subnet_group" "strapi_db_subnet_group" {
   name       = "strapi-db-subnet-group-aditya"
   subnet_ids = data.aws_subnets.default_subnets.ids
-
-  tags = {
-    Name  = "strapi-db-subnet-group-aditya"
-    Owner = "aditya"
-  }
 }
 
 resource "aws_db_instance" "strapi_rds" {
@@ -159,92 +141,53 @@ resource "aws_db_instance" "strapi_rds" {
   publicly_accessible     = false
   vpc_security_group_ids  = [aws_security_group.strapi_rds_sg.id]
   db_subnet_group_name    = aws_db_subnet_group.strapi_db_subnet_group.name
-
-  tags = {
-    Name  = "strapi-db-aditya"
-    Owner = "aditya"
-  }
 }
 
 # ============================================================
-# PRIVATE ECR REPOSITORY (declared so locals can reference it)
+# LOCALS — IMAGE COMES FROM MANUAL ECR
 # ============================================================
-resource "aws_ecr_repository" "strapi" {
-  name = var.ecr_repo_name
 
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name  = "strapi-ecr-repo"
-    Owner = "aditya"
-  }
-}
-
-# ============================================================
-# LOCALS & USER-DATA — install docker, login to ECR and run Strapi
-# ============================================================
 locals {
-  # if a full image URI is provided by CI/CD use it, otherwise construct from private ECR repo + tag
-  full_image = var.image_uri != "" ? var.image_uri : "${aws_ecr_repository.strapi.repository_url}:${var.image_tag}"
+  image_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repo_name}:${var.image_tag}"
 
   user_data = <<-EOF
-              #!/bin/bash
-              set -e
+    #!/bin/bash
+    set -e
 
-              apt-get update -y
-              apt-get install -y docker.io awscli jq
-              systemctl start docker
-              systemctl enable docker
-              usermod -aG docker ubuntu
+    apt-get update -y
+    apt-get install -y docker.io awscli
+    systemctl start docker
+    systemctl enable docker
+    usermod -aG docker ubuntu
 
-              # small wait to ensure instance metadata is available
-              sleep 10
+    aws ecr get-login-password --region ${var.aws_region} \
+      | docker login --username AWS --password-stdin \
+        ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com
 
-              FULL_IMAGE="${local.full_image}"
-              ECR_REGISTRY="${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
+    docker pull ${local.image_uri}
 
-              echo "Logging into ECR registry: $${ECR_REGISTRY}"
-              aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin $${ECR_REGISTRY}
+    docker rm -f strapi || true
 
-              echo "Pulling image $${FULL_IMAGE}"
-              for i in 1 2 3 4 5; do
-                if docker pull $${FULL_IMAGE}; then
-                  echo "Pulled $${FULL_IMAGE} successfully"
-                  break
-                else
-                  echo "docker pull failed (attempt $${i}), retrying in 10s"
-                  sleep 10
-                fi
-              done
-
-              # Stop & remove existing container if present
-              if docker ps -a --format '{{.Names}}' | grep -q '^strapi$'; then
-                docker rm -f strapi || true
-              fi
-
-              # Run container
-              docker run -d -p ${var.strapi_port}:1337 \
-                --name strapi \
-                -e DATABASE_CLIENT=postgres \
-                -e DATABASE_HOST=${aws_db_instance.strapi_rds.address} \
-                -e DATABASE_PORT=5432 \
-                -e DATABASE_NAME=strapi_db \
-                -e DATABASE_USERNAME=strapi \
-                -e DATABASE_PASSWORD=strapi123 \
-                -e DATABASE_SSL=true \
-                -e DATABASE_SSL__REJECT_UNAUTHORIZED=false \
-                -e HOST=0.0.0.0 \
-                -e PORT=1337 \
-                $${FULL_IMAGE}
-
-              EOF
+    docker run -d -p ${var.strapi_port}:1337 \
+      --name strapi \
+      -e DATABASE_CLIENT=postgres \
+      -e DATABASE_HOST=${aws_db_instance.strapi_rds.address} \
+      -e DATABASE_PORT=5432 \
+      -e DATABASE_NAME=strapi_db \
+      -e DATABASE_USERNAME=strapi \
+      -e DATABASE_PASSWORD=strapi123 \
+      -e DATABASE_SSL=true \
+      -e DATABASE_SSL__REJECT_UNAUTHORIZED=false \
+      -e HOST=0.0.0.0 \
+      -e PORT=1337 \
+      ${local.image_uri}
+  EOF
 }
 
 # ============================================================
-# EC2 INSTANCE
+# EC2
 # ============================================================
+
 resource "aws_instance" "strapi" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
@@ -256,7 +199,6 @@ resource "aws_instance" "strapi" {
   user_data            = local.user_data
 
   tags = {
-    Name  = "strapi-ubuntu-ec2-aditya"
-    Owner = "aditya"
+    Name = "strapi-ec2-aditya"
   }
 }
