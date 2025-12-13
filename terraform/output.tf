@@ -9,6 +9,7 @@ output "strapi_url" {
 }
 
 output "deployed_image" {
-  description = "Docker image deployed on EC2"
-  value       = local.image_uri
+  description = "Image deployed on EC2"
+  value       = var.image_uri != "" ? var.image_uri :
+                "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
 }

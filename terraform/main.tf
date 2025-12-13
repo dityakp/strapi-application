@@ -148,6 +148,9 @@ resource "aws_db_instance" "strapi_rds" {
 # ============================================================
 
 locals {
+
+final_image = var.image_uri != "" ? var.image_uri : "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
+  
   user_data = <<-EOF
     #!/bin/bash
     set -e
