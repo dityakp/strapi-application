@@ -48,7 +48,7 @@ data "aws_subnets" "default_subnets" {
 }
 
 # ============================================================
-# IAM — EC2 → ECR PULL ACCESS
+# IAM — EC2 ROLE (OPTIONAL FOR PUBLIC ECR, SAFE TO KEEP)
 # ============================================================
 
 resource "aws_iam_role" "ec2_role" {
@@ -130,38 +130,35 @@ resource "aws_db_subnet_group" "strapi_db_subnet_group" {
 }
 
 resource "aws_db_instance" "strapi_rds" {
-  identifier              = "strapi-db-aditya"
-  allocated_storage       = 20
-  engine                  = "postgres"
-  instance_class          = "db.t3.micro"
-  username                = "strapi"
-  password                = "strapi123"
-  db_name                 = "strapi_db"
-  skip_final_snapshot     = true
-  publicly_accessible     = false
-  vpc_security_group_ids  = [aws_security_group.strapi_rds_sg.id]
-  db_subnet_group_name    = aws_db_subnet_group.strapi_db_subnet_group.name
+  identifier             = "strapi-db-aditya"
+  allocated_storage      = 20
+  engine                 = "postgres"
+  instance_class         = "db.t3.micro"
+  username               = "strapi"
+  password               = "strapi123"
+  db_name                = "strapi_db"
+  skip_final_snapshot    = true
+  publicly_accessible    = false
+  vpc_security_group_ids = [aws_security_group.strapi_rds_sg.id]
+  db_subnet_group_name   = aws_db_subnet_group.strapi_db_subnet_group.name
 }
 
 # ============================================================
-# LOCALS — IMAGE COMES FROM MANUAL ECR
+# LOCALS — USER DATA
 # ============================================================
 
 locals {
-  image_uri = "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
-
   user_data = <<-EOF
     #!/bin/bash
     set -e
 
     apt-get update -y
-    apt-get install -y docker.io awscli
+    apt-get install -y docker.io
     systemctl start docker
     systemctl enable docker
     usermod -aG docker ubuntu
 
-
-    docker pull ${local.image_uri}
+    docker pull ${var.image_uri}
 
     docker rm -f strapi || true
 
@@ -177,7 +174,7 @@ locals {
       -e DATABASE_SSL__REJECT_UNAUTHORIZED=false \
       -e HOST=0.0.0.0 \
       -e PORT=1337 \
-      ${local.image_uri}
+      ${var.image_uri}
   EOF
 }
 
