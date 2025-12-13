@@ -42,7 +42,6 @@ variable "image_tag" {
 }
 
 variable "image_uri" {
-  description = "Optional full image URI (overrides repo + tag)."
+  description = "Full Docker image URI"
   type        = string
-  default     = ""
 }

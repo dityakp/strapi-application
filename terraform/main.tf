@@ -148,7 +148,7 @@ resource "aws_db_instance" "strapi_rds" {
 # ============================================================
 
 locals {
-  image_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repo_name}:${var.image_tag}"
+  image_uri = "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
 
   user_data = <<-EOF
     #!/bin/bash
@@ -160,9 +160,6 @@ locals {
     systemctl enable docker
     usermod -aG docker ubuntu
 
-    aws ecr get-login-password --region ${var.aws_region} \
-      | docker login --username AWS --password-stdin \
-        ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com
 
     docker pull ${local.image_uri}
 
