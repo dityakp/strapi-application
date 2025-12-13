@@ -10,6 +10,6 @@ output "strapi_url" {
 
 output "deployed_image" {
   description = "Image deployed on EC2"
-  value       = var.image_uri != "" ? var.image_uri :
-                "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
+  value = var.image_uri != "" ? var.image_uri : "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
 }
+
