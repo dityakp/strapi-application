@@ -45,3 +45,9 @@ variable "image_uri" {
   description = "Full Docker image URI"
   type        = string
 }
+
+variable "app_keys" {}
+variable "api_token_salt" {}
+variable "admin_jwt_secret" {}
+variable "transfer_token_salt" {}
+variable "jwt_secret" {}

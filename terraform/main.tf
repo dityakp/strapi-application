@@ -148,9 +148,8 @@ resource "aws_db_instance" "strapi_rds" {
 # ============================================================
 
 locals {
+  image_uri = "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
 
-final_image = var.image_uri != "" ? var.image_uri : "public.ecr.aws/r6f7t4j8/strapi-repo-aditya:${var.image_tag}"
-  
   user_data = <<-EOF
     #!/bin/bash
     set -e
@@ -161,12 +160,14 @@ final_image = var.image_uri != "" ? var.image_uri : "public.ecr.aws/r6f7t4j8/str
     systemctl enable docker
     usermod -aG docker ubuntu
 
-    docker pull ${var.image_uri}
+    docker pull ${local.image_uri}
 
     docker rm -f strapi || true
 
     docker run -d -p ${var.strapi_port}:1337 \
       --name strapi \
+      -e HOST=0.0.0.0 \
+      -e PORT=1337 \
       -e DATABASE_CLIENT=postgres \
       -e DATABASE_HOST=${aws_db_instance.strapi_rds.address} \
       -e DATABASE_PORT=5432 \
@@ -175,11 +176,15 @@ final_image = var.image_uri != "" ? var.image_uri : "public.ecr.aws/r6f7t4j8/str
       -e DATABASE_PASSWORD=strapi123 \
       -e DATABASE_SSL=true \
       -e DATABASE_SSL__REJECT_UNAUTHORIZED=false \
-      -e HOST=0.0.0.0 \
-      -e PORT=1337 \
-      ${var.image_uri}
+      -e APP_KEYS="${var.app_keys}" \
+      -e API_TOKEN_SALT="${var.api_token_salt}" \
+      -e ADMIN_JWT_SECRET="${var.admin_jwt_secret}" \
+      -e TRANSFER_TOKEN_SALT="${var.transfer_token_salt}" \
+      -e JWT_SECRET="${var.jwt_secret}" \
+      ${local.image_uri}
   EOF
 }
+
 
 # ============================================================
 # EC2
