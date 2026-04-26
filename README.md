@@ -99,7 +99,7 @@ Access admin panel at: `http://localhost:1337/admin`
 
 **Team Member Component**:
 
-- **Name**: Arman
+- **Name**: Aditya
 - **Role**: DevOps Intern
 - **Bio**: Completed the initial task of setting up the local Strapi development environment and verifying the Content Manager functionality by creating a sample content entry.
 
